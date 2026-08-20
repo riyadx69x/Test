@@ -29,20 +29,68 @@ temp_storage = {}
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 def get_country_name(phone):
-    if phone.startswith("+880") or phone.startswith("880"):
+    phone = phone.replace("+", "")
+    
+    if phone.startswith("880"):
         return "Bangladesh 🇧🇩"
-    elif phone.startswith("+91") or phone.startswith("91"):
+    elif phone.startswith("91"):
         return "India 🇮🇳"
-    elif phone.startswith("+92") or phone.startswith("92"):
+    elif phone.startswith("92"):
         return "Pakistan 🇵🇰"
-    elif phone.startswith("+60") or phone.startswith("60"):
-        return "Malaysia 🇲🇾"
-    elif phone.startswith("+62") or phone.startswith("62"):
-        return "Indonesia 🇮🇳"
-    elif phone.startswith("+1") or phone.startswith("1"):
+    elif phone.startswith("1"):
         return "USA/Canada 🇺🇸"
-    elif phone.startswith("+44") or phone.startswith("44"):
+    elif phone.startswith("44"):
         return "UK 🇬🇧"
+    elif phone.startswith("60"):
+        return "Malaysia 🇲🇾"
+    elif phone.startswith("62"):
+        return "Indonesia 🇮🇳"
+    elif phone.startswith("63"):
+        return "Philippines 🇵🇭"
+    elif phone.startswith("65"):
+        return "Singapore 🇸🇬"
+    elif phone.startswith("66"):
+        return "Thailand 🇹🇭"
+    elif phone.startswith("84"):
+        return "Vietnam 🇻🇳"
+    elif phone.startswith("86"):
+        return "China 🇨🇳"
+    elif phone.startswith("81"):
+        return "Japan 🇯🇵"
+    elif phone.startswith("82"):
+        return "South Korea 🇰🇷"
+    elif phone.startswith("93"):
+        return "Afghanistan 🇦🇫"
+    elif phone.startswith("94"):
+        return "Sri Lanka 🇱🇰"
+    elif phone.startswith("964"):
+        return "Iraq 🇮🇶"
+    elif phone.startswith("966"):
+        return "Saudi Arabia 🇸🇦"
+    elif phone.startswith("971"):
+        return "UAE 🇦🇪"
+    elif phone.startswith("7"):
+        return "Russia/Kazakhstan 🇷🇺"
+    elif phone.startswith("49"):
+        return "Germany 🇩🇪"
+    elif phone.startswith("33"):
+        return "France 🇫🇷"
+    elif phone.startswith("39"):
+        return "Italy 🇮🇹"
+    elif phone.startswith("34"):
+        return "Spain 🇪🇸"
+    elif phone.startswith("55"):
+        return "Brazil 🇧🇷"
+    elif phone.startswith("52"):
+        return "Mexico 🇲🇽"
+    elif phone.startswith("20"):
+        return "Egypt 🇪🇬"
+    elif phone.startswith("234"):
+        return "Nigeria 🇳🇬"
+    elif phone.startswith("27"):
+        return "South Africa 🇿🇦"
+    elif phone.startswith("61"):
+        return "Australia 🇦🇺"
     else:
         return "International 🌍"
 
@@ -144,7 +192,7 @@ async def back_to_countries(event):
         count = len(countries[country])
         buttons.append([Button.inline(f"{country} ({count} Numbers)", data=f"country_{country}")])
     
-    await event.respond("আপনার সেভ করা দেশগুলোর লিস্ট নিচে দেওয়া হলো:", buttons=buttons)
+    await event.edit("আপনার সেভ করা দেশগুলোর লিস্ট নিচে দেওয়া হলো:", buttons=buttons)
 
 @bot.on(events.CallbackQuery(pattern=b'getnum_'))
 async def send_phone_number(event):
@@ -268,7 +316,7 @@ async def finalize_login(event, sender_id, client, phone):
         del temp_storage[sender_id]
     
     await event.respond(
-        f"🎉 অভিনন্দন! অ্যাকাউন্ট সফলভাবে সেভ হয়ে গেছে।\n🌍 দেশ: {country}\n📱 নম্বর: `{phone}`",
+        "Login Success ✅",
         buttons=main_menu_keyboard()
     )
 
