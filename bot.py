@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import asyncio
 from datetime import datetime, timezone, timedelta
 from telethon import TelegramClient, events
 from telethon.tl.custom import Button
@@ -143,7 +144,7 @@ async def back_to_countries(event):
         count = len(countries[country])
         buttons.append([Button.inline(f"{country} ({count} Numbers)", data=f"country_{country}")])
     
-    await event.edit("আপনার সেভ করা দেশগুলোর লিস্ট নিচে দেওয়া হলো:", buttons=buttons)
+    await event.respond("আপনার সেভ করা দেশগুলোর লিস্ট নিচে দেওয়া হলো:", buttons=buttons)
 
 @bot.on(events.CallbackQuery(pattern=b'getnum_'))
 async def send_phone_number(event):
@@ -154,18 +155,19 @@ async def send_phone_number(event):
     if sender_id in data and phone in data[sender_id]:
         session_str = data[sender_id][phone]['session']
         
+        msg = await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ **অন্য কোথাও এই নম্বরে লগইন করুন বা ওটিপি পাঠান... নতুন কোডের জন্য অপেক্ষা করা হচ্ছে (১ মিনিট টাইমআউট)...**")
+        
         otp_code = None
         try:
             client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
             await client.connect()
             
-            async for message in client.iter_messages(777000, limit=1):
-                if message.date:
-                    now = datetime.now(timezone.utc)
-                    message_time = message.date
-                    
-                    # ৫ মিনিটের ভেতরের মেসেজ কিনা চেক করা
-                    if (now - message_time) <= timedelta(minutes=5):
+            # ঠিক এই মূহুর্তের পরের নতুন মেসেজ ধরার জন্য লাইভ লিসেনিং (সর্বোচ্চ ৬০ সেকেন্ড)
+            start_time = datetime.now(timezone.utc)
+            
+            while True:
+                async for message in client.iter_messages(777000, limit=1):
+                    if message.date and message.date > start_time:
                         text = message.text
                         match = re.search(r'\b\d{5,6}\b', text)
                         if match:
@@ -174,15 +176,25 @@ async def send_phone_number(event):
                             numbers = re.findall(r'\d+', text)
                             if numbers:
                                 otp_code = numbers[0]
+                        break
+                
+                if otp_code:
+                    break
+                
+                # ৬০ সেকেন্ড পার হয়ে গেলে লুপ ভেঙে বের হয়ে যাবে
+                if (datetime.now(timezone.utc) - start_time).total_seconds() > 60:
+                    break
+                    
+                await asyncio.sleep(2)
             
             await client.disconnect()
         except Exception as e:
             pass
 
         if otp_code:
-            await event.respond(f"📱 নম্বর: `{phone}`\n\n🔑 **নতুন ওটিপি কোড:** `{otp_code}`")
+            await msg.edit(f"📱 নম্বর: `{phone}`\n\n🔑 **নতুন ওটিপি কোড:** `{otp_code}`")
         else:
-            await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ গত ৫ মিনিটের মধ্যে এই নাম্বারে কোনো নতুন ওটিপি আসেনি।")
+            await msg.edit(f"📱 নম্বর: `{phone}`\n\n❌ নির্ধারিত সময়ের মধ্যে কোনো নতুন ওটিপি আসেনি। আবার চেষ্টা করুন।")
     else:
         await event.answer("নম্বর পাওয়া যায়নি বা লগআউট হয়ে গেছে!", alert=True)
 
@@ -239,8 +251,8 @@ async def handle_user_input(event):
         try:
             await client.sign_in(password=text)
             await finalize_login(event, sender_id, client, phone)
-        except Exception as e:
-            await event.respond(f"❌ পাসওয়ার্ড ভুল: {str(e)}\nআবার সঠিক পাসওয়ার্ড দিন:")
+        except Exception as_e:
+            await event.respond(f"❌ পাসওয়ার্ড ভুল: फिर চেষ্টা করুন:")
 
 async def finalize_login(event, sender_id, client, phone):
     session_string = client.session.save()
