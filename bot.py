@@ -26,12 +26,12 @@ def save_data(data):
 
 temp_storage = {}
 
+# বোটের মূল ক্লায়েন্ট ফাস্ট স্টার্ট করার জন্য
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 def get_country_name(phone):
     phone = phone.replace("+", "").strip()
     
-    # বিশ্বের সমস্ত প্রধান কান্ট্রি কোড ম্যাపిং (বড় থেকে ছোট প্রিফিক্স চেক করা হচ্ছে)
     country_codes = [
         ("93", "Afghanistan 🇦🇫"), ("355", "Albania 🇦🇱"), ("213", "Algeria 🇩🇿"), ("376", "Andorra 🇦🇩"),
         ("244", "Angola 🇦🇴"), ("54", "Argentina 🇦🇷"), ("374", "Armenia 🇦🇲"), ("61", "Australia 🇦🇺"),
@@ -262,20 +262,25 @@ async def handle_user_input(event):
         waiting_msg = await event.respond("⏳ **Waiting for otp...**")
         temp_storage[sender_id]['msg_ids'].append(waiting_msg.id)
         
+        # ফাস্ট কানেকশন প্রসেস
         client = TelegramClient(StringSession(), API_ID, API_HASH)
-        await client.connect()
         
         try:
+            await client.connect()
             sent = await client.send_code_request(phone)
             temp_storage[sender_id]['client'] = client
             temp_storage[sender_id]['phone_code_hash'] = sent.phone_code_hash
             temp_storage[sender_id]['step'] = 'waiting_otp'
             
-            msg = await event.respond("✅ ওটিপি পাঠানো হয়েছে। আপনার টেলিগ্রাম অ্যাপে কোডটি আসলে সেটি এখানে দিন:")
+            msg = await waiting_msg.edit("✅ ওটিপি পাঠানো হয়েছে। আপনার টেলিগ্রাম অ্যাপে কোডটি আসলে সেটি এখানে দিন:")
             temp_storage[sender_id]['msg_ids'].append(msg.id)
         except Exception as e:
-            await client.disconnect()
-            del temp_storage[sender_id]
+            try:
+                await client.disconnect()
+            except:
+                pass
+            if sender_id in temp_storage:
+                del temp_storage[sender_id]
             await waiting_msg.edit(f"❌ সমস্যা হয়েছে: {str(e)}")
             
     elif state == 'waiting_otp':
