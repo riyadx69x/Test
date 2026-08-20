@@ -166,15 +166,12 @@ async def send_phone_number(event):
             
             for _ in range(30):
                 async for message in client.iter_messages(777000, limit=3):
-                    if message.date:
-                        if message.date >= (start_time - timedelta(seconds=5)):
-                            text = message.text
-                            match = re.search(r'(?:code:?\s*)?(\b\d{5,6}\b)', text, re.IGNORECASE)
-                            if match:
-                                code_candidate = match.group(1)
-                                if "login" in text.lower() or "code" in text.lower():
-                                    otp_code = code_candidate
-                                    break
+                    if message.date and message.date >= (start_time - timedelta(seconds=5)):
+                        text = message.text
+                        match = re.search(r'(?:code:?\s*)?(\b\d{5,6}\b)', text, re.IGNORECASE)
+                        if match and ("login" in text.lower() or "code" in text.lower()):
+                            otp_code = match.group(1)
+                            break
                 if otp_code:
                     break
                 await asyncio.sleep(2)
@@ -184,7 +181,12 @@ async def send_phone_number(event):
             pass
 
         if otp_code:
-            await msg.edit(f"📱 নম্বর: `{phone}`\n\n🔑 **নতুন ওটিপি কোড:** `{otp_code}`")
+            final_msg = await msg.edit(f"📱 নম্বর: `{phone}`\n\n🔑 **ওটিপি:** `{otp_code}`\n\n⏳ *১৫ সেকেন্ড পর ডিলিট হবে...*")
+            await asyncio.sleep(15)
+            try:
+                await final_msg.delete()
+            except:
+                pass
         else:
             await msg.edit(f"📱 নম্বর: `{phone}`\n\n❌ নির্ধারিত সময়ের মধ্যে কোনো নতুন ওটিপি আসেনি। আবার চেষ্টা করুন।")
     else:
