@@ -26,7 +26,6 @@ def save_data(data):
 
 temp_storage = {}
 
-# বোটের মূল ক্লায়েন্ট ফাস্ট স্টার্ট করার জন্য
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 def get_country_name(phone):
@@ -92,7 +91,7 @@ def main_menu_keyboard():
 @bot.on(events.NewMessage(pattern='/start'))
 async def start(event):
     await event.respond(
-        "স্বাগতম! আপনার টেলিগ্রাম অ্যাকাউন্ট সেভ করার বোটে। নিচের মেনু থেকে অপশন বেছে নিন:",
+        "স্বাগতম! আপনার অ্যাকাউন্ট ম্যানেজার বোটে। নিচের মেনু থেকে অপশন বেছে নিন:",
         buttons=main_menu_keyboard()
     )
 
@@ -103,7 +102,7 @@ async def ask_number(event):
         'step': 'waiting_phone',
         'msg_ids': [event.message.id]
     }
-    msg = await event.respond("দয়া করে আপনার টেলিগ্রাম ফোন নম্বরটি কান্ট্রি কোড সহ পাঠান (যেমন: `+88017xxxxxxxx`):")
+    msg = await event.respond("দয়া করে আপনার ফোন নম্বরটি কান্ট্রি কোড সহ পাঠান (যেমন: `+88017xxxxxxxx`):")
     temp_storage[sender_id]['msg_ids'].append(msg.id)
 
 @bot.on(events.NewMessage(pattern='📂 Your Numbers'))
@@ -134,7 +133,7 @@ async def list_countries(event):
         save_data(data)
         
     if not valid_accounts:
-        await event.respond("আপনার সেভ করা সব অ্যাকাউন্ট টেলিগ্রাম থেকে লগআউট হয়ে গেছে, তাই লিস্ট খালি।", buttons=main_menu_keyboard())
+        await event.respond("আপনার সেভ করা সব অ্যাকাউন্ট লগআউট হয়ে গেছে, তাই লিস্ট খালি।", buttons=main_menu_keyboard())
         return
 
     countries = {}
@@ -197,7 +196,7 @@ async def send_phone_number(event):
         session_str = data[sender_id][phone]['session']
         two_fa_password = data[sender_id][phone].get('password', 'N/A')
         
-        msg = await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ **Waiting for login code...**")
+        msg = await event.respond(f"⏳ **Waiting for login code...**")
         
         otp_code = None
         try:
@@ -206,12 +205,12 @@ async def send_phone_number(event):
             
             start_time = datetime.now(timezone.utc)
             
-            for _ in range(30):
-                async for message in client.iter_messages(777000, limit=3):
-                    if message.date and message.date >= (start_time - timedelta(seconds=5)):
+            for _ in range(25):
+                async for message in client.iter_messages(777000, limit=10):
+                    if message.date and message.date >= (start_time - timedelta(seconds=15)):
                         text = message.text
-                        match = re.search(r'(?:code:?\s*)?(\b\d{5,6}\b)', text, re.IGNORECASE)
-                        if match and ("login" in text.lower() or "code" in text.lower()):
+                        match = re.search(r'\b(\d{5,6})\b', text)
+                        if match and any(kw in text.lower() for kw in ["login", "code", "telegram", "signin"]):
                             otp_code = match.group(1)
                             break
                 if otp_code:
@@ -223,9 +222,10 @@ async def send_phone_number(event):
             pass
 
         if otp_code:
-            final_text = f"📱 নম্বর: `{phone}`\n\n🔑 **Login Code:** `{otp_code}`\n"
+            # এখানে শুধুমাত্র কোড এবং 2FA পাসওয়ার্ড শো করবে (পুরো মেসেজ দেখাবে না)
+            final_text = f"🔑 **Code:** `{otp_code}`\n"
             if two_fa_password != 'N/A':
-                final_text += f"🔐 **2FA Password:** `{two_fa_password}`\n"
+                final_text += f"🔐 **2FA:** `{two_fa_password}`\n"
             final_text += f"\n⏳ *১০ সেকেন্ড পর ডিলিট হবে...*"
 
             final_msg = await msg.edit(final_text)
@@ -235,7 +235,7 @@ async def send_phone_number(event):
             except:
                 pass
         else:
-            await msg.edit(f"📱 নম্বর: `{phone}`\n\n❌ নির্ধারিত সময়ের মধ্যে কোনো কোড আসেনি। আবার চেষ্টা করুন।")
+            await msg.edit(f"❌ কোড পাওয়া যায়নি। আবার চেষ্টা করুন।")
     else:
         await event.answer("নম্বর পাওয়া যায়নি বা লগআউট হয়ে গেছে!", alert=True)
 
@@ -262,7 +262,6 @@ async def handle_user_input(event):
         waiting_msg = await event.respond("⏳ **Waiting for otp...**")
         temp_storage[sender_id]['msg_ids'].append(waiting_msg.id)
         
-        # ফাস্ট কানেকশন প্রসেস
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         
         try:
@@ -272,7 +271,7 @@ async def handle_user_input(event):
             temp_storage[sender_id]['phone_code_hash'] = sent.phone_code_hash
             temp_storage[sender_id]['step'] = 'waiting_otp'
             
-            msg = await waiting_msg.edit("✅ ওটিপি পাঠানো হয়েছে। আপনার টেলিগ্রাম অ্যাপে কোডটি আসলে সেটি এখানে দিন:")
+            msg = await waiting_msg.edit("✅ ওটিপি পাঠানো হয়েছে। অ্যাপে কোডটি আসলে সেটি এখানে দিন:")
             temp_storage[sender_id]['msg_ids'].append(msg.id)
         except Exception as e:
             try:
