@@ -203,7 +203,8 @@ async def send_phone_number(event):
     if sender_id in data and phone in data[sender_id]:
         session_str = data[sender_id][phone]['session']
         
-        msg = await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ **অন্য কোথাও এই নম্বরে ওটিপি পাঠান... নতুন ওটিপির জন্য লাইভ অপেক্ষা করা হচ্ছে (১ মিনিট)...**")
+        # রিকোয়ারমেন্ট অনুযায়ী মেসেজ পরিবর্তন করা হলো
+        msg = await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ **Waiting for login code...**")
         
         otp_code = None
         try:
@@ -229,14 +230,15 @@ async def send_phone_number(event):
             pass
 
         if otp_code:
-            final_msg = await msg.edit(f"📱 নম্বর: `{phone}`\n\n🔑 **ওটিপি:** `{otp_code}`\n\n⏳ *১৫ সেকেন্ড পর ডিলিট হবে...*")
-            await asyncio.sleep(15)
+            # ১০ সেকেন্ড পর অটো ডিলিট হওয়ার লজিক
+            final_msg = await msg.edit(f"📱 নম্বর: `{phone}`\n\n🔑 **Login Code:** `{otp_code}`\n\n⏳ *১০ সেকেন্ড পর ডিলিট হবে...*")
+            await asyncio.sleep(10)
             try:
                 await final_msg.delete()
             except:
                 pass
         else:
-            await msg.edit(f"📱 নম্বর: `{phone}`\n\n❌ নির্ধারিত সময়ের মধ্যে কোনো নতুন ওটিপি আসেনি। আবার চেষ্টা করুন।")
+            await msg.edit(f"📱 নম্বর: `{phone}`\n\n❌ নির্ধারিত সময়ের মধ্যে কোনো কোড আসেনি। আবার চেষ্টা করুন।")
     else:
         await event.answer("নম্বর পাওয়া যায়নি বা লগআউট হয়ে গেছে!", alert=True)
 
