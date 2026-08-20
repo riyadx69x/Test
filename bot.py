@@ -162,21 +162,16 @@ async def send_phone_number(event):
             client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
             await client.connect()
             
-            # নাম্বারে ক্লিক করার মুহূর্তের সময় রেকর্ড করা
             start_time = datetime.now(timezone.utc)
             
-            # লুপ চালিয়ে রিয়েল-টাইমে নতুন মেসেজের জন্য চেক করা
-            for _ in range(30):  // ৩০ বার চেক করবে (প্রতি ২ সেকেন্ডে একবার = ৬০ সেকেন্ড)
+            for _ in range(30):
                 async for message in client.iter_messages(777000, limit=3):
                     if message.date:
-                        # শুধু সেই মেসেজগুলো ধরবে যা এইমাত্র অর্থাৎ নাম্বারে ক্লিক করার পর এসেছে
                         if message.date >= (start_time - timedelta(seconds=5)):
                             text = message.text
-                            # ৫ বা ৬ ডিজিটের কোড বা Login code খোঁজা
                             match = re.search(r'(?:code:?\s*)?(\b\d{5,6}\b)', text, re.IGNORECASE)
                             if match:
                                 code_candidate = match.group(1)
-                                # টেলিগ্রামের পিন বা ফালতু ডিজিট এড়াতে চেক করা
                                 if "login" in text.lower() or "code" in text.lower():
                                     otp_code = code_candidate
                                     break
@@ -233,8 +228,7 @@ async def handle_user_input(event):
         phone_code_hash = temp_storage[sender_id]['phone_code_hash']
         
         try:
-            # সঠিক কোড দিলে লগইন হ্যান্ডেল করা
-            user = await client.sign_in(phone, text, phone_code_hash=phone_code_hash)
+            await client.sign_in(phone, text, phone_code_hash=phone_code_hash)
             await finalize_login(event, sender_id, client, phone)
         except SessionPasswordNeededError:
             temp_storage[sender_id]['step'] = 'waiting_password'
