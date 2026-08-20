@@ -10,7 +10,7 @@ from telethon.errors import SessionPasswordNeededError
 
 API_ID = 34166690
 API_HASH = 'f80db9e0f7d2c57ffec3db21b359d339'
-BOT_TOKEN = '8873131995:AAGYmcEmuSONcF-L7sgTNj4Cl2ECQOOanGU'
+BOT_TOKEN = '8944318808:AAHsINZeAMhzk851KmyWqkjchCB3ZoiJkks'
 
 DATA_FILE = 'saved_accounts.json'
 
