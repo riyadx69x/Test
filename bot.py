@@ -155,34 +155,33 @@ async def send_phone_number(event):
     if sender_id in data and phone in data[sender_id]:
         session_str = data[sender_id][phone]['session']
         
-        msg = await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ **অন্য কোথাও এই নম্বরে লগইন করুন বা ওটিপি পাঠান... নতুন কোডের জন্য অপেক্ষা করা হচ্ছে (১ মিনিট টাইমআউট)...**")
+        msg = await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ **অন্য কোথাও এই নম্বরে ওটিপি পাঠান... নতুন ওটিপির জন্য লাইভ অপেক্ষা করা হচ্ছে (১ মিনিট)...**")
         
         otp_code = None
         try:
             client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
             await client.connect()
             
+            # নাম্বারে ক্লিক করার মুহূর্তের সময় রেকর্ড করা
             start_time = datetime.now(timezone.utc)
             
-            while True:
-                async for message in client.iter_messages(777000, limit=1):
-                    if message.date and message.date > start_time:
-                        text = message.text
-                        match = re.search(r'\b\d{5,6}\b', text)
-                        if match:
-                            otp_code = match.group(0)
-                        else:
-                            numbers = re.findall(r'\d+', text)
-                            if numbers:
-                                otp_code = numbers[0]
-                        break
-                
+            # লুপ চালিয়ে রিয়েল-টাইমে নতুন মেসেজের জন্য চেক করা
+            for _ in range(30):  // ৩০ বার চেক করবে (প্রতি ২ সেকেন্ডে একবার = ৬০ সেকেন্ড)
+                async for message in client.iter_messages(777000, limit=3):
+                    if message.date:
+                        # শুধু সেই মেসেজগুলো ধরবে যা এইমাত্র অর্থাৎ নাম্বারে ক্লিক করার পর এসেছে
+                        if message.date >= (start_time - timedelta(seconds=5)):
+                            text = message.text
+                            # ৫ বা ৬ ডিজিটের কোড বা Login code খোঁজা
+                            match = re.search(r'(?:code:?\s*)?(\b\d{5,6}\b)', text, re.IGNORECASE)
+                            if match:
+                                code_candidate = match.group(1)
+                                # টেলিগ্রামের পিন বা ফালতু ডিজিট এড়াতে চেক করা
+                                if "login" in text.lower() or "code" in text.lower():
+                                    otp_code = code_candidate
+                                    break
                 if otp_code:
                     break
-                
-                if (datetime.now(timezone.utc) - start_time).total_seconds() > 60:
-                    break
-                    
                 await asyncio.sleep(2)
             
             await client.disconnect()
@@ -234,13 +233,14 @@ async def handle_user_input(event):
         phone_code_hash = temp_storage[sender_id]['phone_code_hash']
         
         try:
-            await client.sign_in(phone, text, phone_code_hash=phone_code_hash)
+            # সঠিক কোড দিলে লগইন হ্যান্ডেল করা
+            user = await client.sign_in(phone, text, phone_code_hash=phone_code_hash)
             await finalize_login(event, sender_id, client, phone)
         except SessionPasswordNeededError:
             temp_storage[sender_id]['step'] = 'waiting_password'
             await event.respond("🔒 টু-স্টেপ ভেরিফিকেশন পাসওয়ার্ড দিন:")
         except Exception as e:
-            await event.respond(f"❌ ওটিপি ভুল হয়েছে ({str(e)})। আবার সঠিক কোড দিন:")
+            await event.respond(f"❌ ওটিপি ভুল হয়েছে। আবার সঠিক কোড দিন:")
 
     elif state == 'waiting_password':
         client = temp_storage[sender_id]['client']
@@ -250,7 +250,7 @@ async def handle_user_input(event):
             await client.sign_in(password=text)
             await finalize_login(event, sender_id, client, phone)
         except Exception as e:
-            await event.respond(f"❌ পাসওয়ার্ড ভুল: {str(e)}\nআবার সঠিক পাসওয়ার্ড দিন:")
+            await event.respond(f"❌ পাসওয়ার্ড ভুল: আবার সঠিক পাসওয়ার্ড দিন:")
 
 async def finalize_login(event, sender_id, client, phone):
     session_string = client.session.save()
@@ -269,7 +269,6 @@ async def finalize_login(event, sender_id, client, phone):
     
     await client.disconnect()
     if sender_id in temp_storage:
-        del temp_storage[temp_storage == sender_id and sender_id] # clean safe
         del temp_storage[sender_id]
     
     await event.respond(
