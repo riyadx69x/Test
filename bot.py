@@ -1,5 +1,7 @@
 import os
 import json
+import re
+from datetime import datetime, timezone, timedelta
 from telethon import TelegramClient, events
 from telethon.tl.custom import Button
 from telethon.sessions import StringSession
@@ -150,21 +152,37 @@ async def send_phone_number(event):
     data = load_data()
     
     if sender_id in data and phone in data[sender_id]:
-        # নম্বর পাঠানোর পাশাপাশি ইউজারকে জানিয়ে দেওয়া যে এই নাম্বারে কোড পাঠালে বট অটো রিড করবে
         session_str = data[sender_id][phone]['session']
         
-        # ব্যাকগ্রাউন্ডে ঐ একাউন্টের ইনবক্স চেক করে লেটেস্ট ওটিপি বের করার চেষ্টা
-        otp_msg = "কোনো নতুন ওটিপি পাওয়া যায়নি।"
+        otp_code = None
         try:
             client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
             await client.connect()
+            
             async for message in client.iter_messages(777000, limit=1):
-                otp_msg = message.text
+                if message.date:
+                    now = datetime.now(timezone.utc)
+                    message_time = message.date
+                    
+                    # ৫ মিনিটের ভেতরের মেসেজ কিনা চেক করা
+                    if (now - message_time) <= timedelta(minutes=5):
+                        text = message.text
+                        match = re.search(r'\b\d{5,6}\b', text)
+                        if match:
+                            otp_code = match.group(0)
+                        else:
+                            numbers = re.findall(r'\d+', text)
+                            if numbers:
+                                otp_code = numbers[0]
+            
             await client.disconnect()
         except Exception as e:
-            otp_msg = f"রিড করতে সমস্যা হয়েছে: {str(e)}"
+            pass
 
-        await event.respond(f"📱 নম্বর: `{phone}`\n\n🔍 **লেটেস্ট ওটিপি/মেসেজ:**\n{otp_msg}")
+        if otp_code:
+            await event.respond(f"📱 নম্বর: `{phone}`\n\n🔑 **নতুন ওটিপি কোড:** `{otp_code}`")
+        else:
+            await event.respond(f"📱 নম্বর: `{phone}`\n\n⏳ গত ৫ মিনিটের মধ্যে এই নাম্বারে কোনো নতুন ওটিপি আসেনি।")
     else:
         await event.answer("নম্বর পাওয়া যায়নি বা লগআউট হয়ে গেছে!", alert=True)
 
