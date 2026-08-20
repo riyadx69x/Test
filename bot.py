@@ -1,10 +1,11 @@
 import os
 import json
-from telethon import TelegramClient, events, Button
+from telethon import TelegramClient, events
+from telethon.tl.custom import Button
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 
-# সঠিক API_ID এবং API_HASH
+# আপনার সঠিক API_ID এবং API_HASH
 API_ID = 34166690
 API_HASH = 'f80db9e0f7d2c57ffec3db21b359d339'
 
@@ -28,44 +29,60 @@ temp_storage = {}
 
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
+# কান্ট্রি কোড থেকে দেশের নাম বের করার ফাংশন
+def get_country_name(phone):
+    if phone.startswith("+880"):
+        return "Bangladesh 🇧🇩"
+    elif phone.startswith("+91"):
+        return "India 🇮🇳"
+    elif phone.startswith("+92"):
+        return "Pakistan 🇵🇰"
+    elif phone.startswith("+60"):
+        return "Malaysia 🇲🇾"
+    elif phone.startswith("+62"):
+        return "Indonesia 🇮🇳"
+    elif phone.startswith("+1"):
+        return "USA/Canada 🇺🇸"
+    elif phone.startswith("+44"):
+        return "UK 🇬🇧"
+    else:
+        return "International 🌍"
+
+# পার্মানেন্ট নিচের কিবোর্ড বাটন (Reply Keyboard)
+def main_menu_keyboard():
+    return [
+        [Button.text("➕ New Number Add", resize=True)],
+        [Button.text("📂 Your Numbers", resize=True)]
+    ]
+
 @bot.on(events.NewMessage(pattern='/start'))
 async def start(event):
-    buttons = [
-        [Button.inline("➕ New Number Add", data="add_number")],
-        [Button.inline("📂 Your Numbers", data="list_numbers")]
-    ]
-    await event.respond("স্বাগতম! আপনার টেলিগ্রাম অ্যাকাউন্ট সেশন ম্যানেজার বোটে। নিচের অপশন থেকে একটি বেছে নিন:", buttons=buttons)
+    await event.respond(
+        "স্বাগতম! আপনার টেলিগ্রাম অ্যাকাউন্ট সেশন ম্যানেজার বোটে। নিচের মেনু থেকে অপশন বেছে নিন:",
+        buttons=main_menu_keyboard()
+    )
 
-@bot.on(events.CallbackQuery(data=b'add_number'))
+@bot.on(events.NewMessage(pattern='➕ New Number Add'))
 async def ask_number(event):
     sender_id = event.sender_id
     temp_storage[sender_id] = {'step': 'waiting_phone'}
-    await event.edit("দয়া করে আপনার টেলিগ্রাম ফোন নম্বরটি কান্ট্রি কোড সহ পাঠান (যেমন: `+88017xxxxxxxx`):")
+    await event.respond("দয়া করে আপনার টেলিগ্রাম ফোন নম্বরটি কান্ট্রি কোড সহ পাঠান (যেমন: `+88017xxxxxxxx`):")
 
-@bot.on(events.CallbackQuery(data=b'list_numbers'))
+@bot.on(events.NewMessage(pattern='📂 Your Numbers'))
 async def list_numbers(event):
     sender_id = str(event.sender_id)
     data = load_data()
     
     if sender_id not in data or not data[sender_id]:
-        await event.edit("আপনার কোনো অ্যাকাউন্ট সেভ করা নেই।", buttons=[[Button.inline("🔙 Back", data="back_home")]])
+        await event.respond("আপনার কোনো অ্যাকাউন্ট সেভ করা নেই।", buttons=main_menu_keyboard())
         return
     
     buttons = []
     for phone, info in data[sender_id].items():
         country = info.get('country', 'Unknown')
-        buttons.append([Button.inline(f"{phone} ({country})", data=f"view_{phone}")])
+        buttons.append([Button.inline(f"📱 {phone} ({country})", data=f"view_{phone}")])
     
-    buttons.append([Button.inline("🔙 Back", data="back_home")])
-    await event.edit("আপনার সেভ করা অ্যাকাউন্টগুলোর লিস্ট:", buttons=buttons)
-
-@bot.on(events.CallbackQuery(data=b'back_home'))
-async def back_home(event):
-    buttons = [
-        [Button.inline("➕ New Number Add", data="add_number")],
-        [Button.inline("📂 Your Numbers", data="list_numbers")]
-    ]
-    await event.edit("মূল মেনুতে ফিরে এসেছেন:", buttons=buttons)
+    await event.respond("আপনার সেভ করা অ্যাকাউন্টগুলোর লিস্ট নিচে দেওয়া হলো:", buttons=buttons)
 
 @bot.on(events.CallbackQuery(pattern=b'view_'))
 async def view_account(event):
@@ -75,21 +92,37 @@ async def view_account(event):
     
     if sender_id in data and phone in data[sender_id]:
         acc = data[sender_id][phone]
-        msg = f"📱 **Number:** {phone}\n🌍 **Country:** {acc.get('country')}\n🔑 **Session String:**\n`{acc.get('session')}`"
-        await event.edit(msg, buttons=[[Button.inline("🔙 Back to List", data="list_numbers")]])
+        session_str = acc.get('session')
+        
+        # সেশন ফাইল বা টেক্সট আকারে পাঠানো (কুকিজের মতো যেন সহজেই কপি বা ডাউনলোড করা যায়)
+        file_name = f"session_{phone.replace('+', '')}.txt"
+        with open(file_name, 'w') as f:
+            f.write(session_str)
+            
+        await event.respond(f"📱 **Number:** {phone}\n🌍 **Country:** {acc.get('country')}\n🔑 **Session String File:**")
+        await event.client.send_file(event.chat_id, file_name)
+        os.remove(file_name)
+    else:
+        await event.answer("সেশন পাওয়া যায়নি!", alert=True)
 
 @bot.on(events.NewMessage())
 async def handle_user_input(event):
+    # মেনু বাটনে ক্লিক করলে ইগনোর করা (যাতে প্রম্পটে ঝামেলা না করে)
+    text = event.raw_text.strip()
+    if text in ['➕ New Number Add', '📂 Your Numbers', '/start']:
+        return
+
     sender_id = event.sender_id
     if sender_id not in temp_storage:
         return
     
     state = temp_storage[sender_id].get('step')
-    text = event.raw_text.strip()
     
     if state == 'waiting_phone':
         phone = text
         temp_storage[sender_id]['phone'] = phone
+        
+        waiting_msg = await event.respond("⏳ **Waiting for otp...** (কানেক্ট করা হচ্ছে...)")
         
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
@@ -99,11 +132,11 @@ async def handle_user_input(event):
             temp_storage[sender_id]['client'] = client
             temp_storage[sender_id]['phone_code_hash'] = sent.phone_code_hash
             temp_storage[sender_id]['step'] = 'waiting_otp'
-            await event.respond("✅ ওটিপি (OTP) পাঠানো হয়েছে। টেলিগ্রাম অ্যাপে কোডটি পেলে সেটি এখানে দিন:")
+            await waiting_msg.edit("✅ ওটিপি (OTP) পাঠানো হয়েছে। টেলিগ্রাম অ্যাপে কোডটি পেলে সেটি এখানে দিন:")
         except Exception as e:
             await client.disconnect()
             del temp_storage[sender_id]
-            await event.respond(f"❌ ভুল নম্বর বা সমস্যা হয়েছে: {str(e)}")
+            await waiting_msg.edit(f"❌ ভুল নম্বর বা সমস্যা হয়েছে: {str(e)}")
             
     elif state == 'waiting_otp':
         temp_storage[sender_id]['otp'] = text
@@ -121,7 +154,7 @@ async def handle_user_input(event):
         except Exception as e:
             await client.disconnect()
             del temp_storage[sender_id]
-            await event.respond(f"❌ লগইন ব্যর্থ হয়েছে: {str(e)}\nদয়া করে `/start` দিয়ে আবার শুরু করুন।")
+            await event.respond(f"❌ লগইন ব্যর্থ হয়েছে: {str(e)}\nদয়া করে আবার চেষ্টা করুন।", buttons=main_menu_keyboard())
 
     elif state == 'waiting_password_or_done':
         password = text
@@ -134,12 +167,13 @@ async def handle_user_input(event):
         except Exception as e:
             await client.disconnect()
             del temp_storage[sender_id]
-            await event.respond(f"❌ পাসওয়ার্ড ভুল বা সমস্যা হয়েছে: {str(e)}\nদয়া করে `/start` দিয়ে আবার চেষ্টা করুন।")
+            await event.respond(f"❌ পাসওয়ার্ড ভুল বা সমস্যা হয়েছে: {str(e)}\nদয়া করে আবার চেষ্টা করুন।", buttons=main_menu_keyboard())
 
 async def finalize_login(event, sender_id, client, phone):
     session_string = client.session.save()
     
-    country = "Bangladesh" if phone.startswith("+880") else "International"
+    # অটো কান্ট্রি ডিটেক্ট
+    country = get_country_name(phone)
     
     data = load_data()
     str_sender_id = str(sender_id)
@@ -155,11 +189,10 @@ async def finalize_login(event, sender_id, client, phone):
     await client.disconnect()
     del temp_storage[sender_id]
     
-    buttons = [
-        [Button.inline("➕ New Number Add", data="add_number")],
-        [Button.inline("📂 Your Numbers", data="list_numbers")]
-    ]
-    await event.respond(f"🎉 অভিনন্দন! অ্যাকাউন্ট সফলভাবে সেভ হয়ে গেছে।\n📱 নম্বর: {phone}\n🌍 দেশ: {country}", buttons=buttons)
+    await event.respond(
+        f"🎉 অভিনন্দন! অ্যাকাউন্ট সফলভাবে সেভ হয়ে গেছে।\n📱 নম্বর: {phone}\n🌍 দেশ: {country}",
+        buttons=main_menu_keyboard()
+    )
 
 print("Bot is running...")
 bot.run_until_disconnected()
