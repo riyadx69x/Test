@@ -196,6 +196,9 @@ async def send_phone_number(event):
         session_str = data[sender_id][phone]['session']
         two_fa_password = data[sender_id][phone].get('password', 'N/A')
         
+        # নম্বরটি নরমাল টেক্সট আকারে পাঠানো হলো যাতে সহজে কপি করা যায়
+        num_msg = await event.respond(f"📱 নম্বর: `{phone}`\n⏳ *১০ সেকেন্ড পর অটো ডিলিট হবে...*")
+        
         msg = await event.respond(f"⏳ **Waiting for login code...**")
         
         otp_code = None
@@ -222,20 +225,27 @@ async def send_phone_number(event):
             pass
 
         if otp_code:
-            # এখানে শুধুমাত্র কোড এবং 2FA পাসওয়ার্ড শো করবে (পুরো মেসেজ দেখাবে না)
             final_text = f"🔑 **Code:** `{otp_code}`\n"
             if two_fa_password != 'N/A':
                 final_text += f"🔐 **2FA:** `{two_fa_password}`\n"
             final_text += f"\n⏳ *১০ সেকেন্ড পর ডিলিট হবে...*"
 
             final_msg = await msg.edit(final_text)
+            
+            # ১০ সেকেন্ড পর কোড ও নম্বর উভয় মেসেজ ডিলিট হয়ে যাবে
             await asyncio.sleep(10)
             try:
                 await final_msg.delete()
+                await num_msg.delete()
             except:
                 pass
         else:
             await msg.edit(f"❌ কোড পাওয়া যায়নি। আবার চেষ্টা করুন।")
+            await asyncio.sleep(10)
+            try:
+                await num_msg.delete()
+            except:
+                pass
     else:
         await event.answer("নম্বর পাওয়া যায়নি বা লগআউট হয়ে গেছে!", alert=True)
 
