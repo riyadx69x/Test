@@ -131,7 +131,7 @@ async def handle_user_input(event):
         try:
             await client.sign_in(password=password)
             await finalize_login(event, sender_id, client, phone)
-        except Exception as.e: # pyright: ignore
+        except Exception as e:
             await client.disconnect()
             del temp_storage[sender_id]
             await event.respond(f"❌ পাসওয়ার্ড ভুল বা সমস্যা হয়েছে: {str(e)}\nদয়া করে `/start` দিয়ে আবার চেষ্টা করুন।")
@@ -155,7 +155,6 @@ async def finalize_login(event, sender_id, client, phone):
     await client.disconnect()
     del temp_storage[sender_id]
     
-    # ব্যাক বাটনসহ সাকসেস মেসেজ পাঠানো
     buttons = [
         [Button.inline("➕ New Number Add", data="add_number")],
         [Button.inline("📂 Your Numbers", data="list_numbers")]
