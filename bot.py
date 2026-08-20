@@ -5,7 +5,7 @@ from telethon.tl.custom import Button
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 
-# আপনার সঠিক API_ID এবং API_HASH
+# সঠিক API_ID এবং API_HASH
 API_ID = 34166690
 API_HASH = 'f80db9e0f7d2c57ffec3db21b359d339'
 
@@ -29,7 +29,7 @@ temp_storage = {}
 
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# কান্ট্রি কোড থেকে দেশের নাম বের করার ফাংশন
+# কান্ট্রি কোড থেকে সুন্দর নাম ও ফ্ল্যাগ বের করার ফাংশন
 def get_country_name(phone):
     if phone.startswith("+880"):
         return "Bangladesh 🇧🇩"
@@ -40,7 +40,7 @@ def get_country_name(phone):
     elif phone.startswith("+60"):
         return "Malaysia 🇲🇾"
     elif phone.startswith("+62"):
-        return "Indonesia 🇮🇳"
+        return "Indonesia 🇮🇩"
     elif phone.startswith("+1"):
         return "USA/Canada 🇺🇸"
     elif phone.startswith("+44"):
@@ -80,34 +80,25 @@ async def list_numbers(event):
     buttons = []
     for phone, info in data[sender_id].items():
         country = info.get('country', 'Unknown')
-        buttons.append([Button.inline(f"📱 {phone} ({country})", data=f"view_{phone}")])
+        # বাটনে শুধু কান্ট্রি নেম দেখাবে
+        buttons.append([Button.inline(f"{country}", data=f"getnum_{phone}")])
     
-    await event.respond("আপনার সেভ করা অ্যাকাউন্টগুলোর লিস্ট নিচে দেওয়া হলো:", buttons=buttons)
+    await event.respond("আপনার সেভ করা দেশগুলোর লিস্ট নিচে দেওয়া হলো (ক্লিক করলে নম্বর দেখতে পাবেন):", buttons=buttons)
 
-@bot.on(events.CallbackQuery(pattern=b'view_'))
-async def view_account(event):
+@bot.on(events.CallbackQuery(pattern=b'getnum_'))
+async def send_phone_number(event):
     sender_id = str(event.sender_id)
-    phone = event.data.decode().replace('view_', '')
+    phone = event.data.decode().replace('getnum_', '')
     data = load_data()
     
     if sender_id in data and phone in data[sender_id]:
-        acc = data[sender_id][phone]
-        session_str = acc.get('session')
-        
-        # সেশন ফাইল বা টেক্সট আকারে পাঠানো (কুকিজের মতো যেন সহজেই কপি বা ডাউনলোড করা যায়)
-        file_name = f"session_{phone.replace('+', '')}.txt"
-        with open(file_name, 'w') as f:
-            f.write(session_str)
-            
-        await event.respond(f"📱 **Number:** {phone}\n🌍 **Country:** {acc.get('country')}\n🔑 **Session String File:**")
-        await event.client.send_file(event.chat_id, file_name)
-        os.remove(file_name)
+        # ইউজার যেন সহজে ১ ক্লিকে কপি করতে পারে, তাই কোড ব্লক (```) আকারে নম্বরটি পাঠানো হচ্ছে
+        await event.respond(f"📱 আপনার সেভ করা নম্বর:\n`{phone}`")
     else:
-        await event.answer("সেশন পাওয়া যায়নি!", alert=True)
+        await event.answer("নম্বর পাওয়া যায়নি!", alert=True)
 
 @bot.on(events.NewMessage())
 async def handle_user_input(event):
-    # মেনু বাটনে ক্লিক করলে ইগনোর করা (যাতে প্রম্পটে ঝামেলা না করে)
     text = event.raw_text.strip()
     if text in ['➕ New Number Add', '📂 Your Numbers', '/start']:
         return
@@ -122,7 +113,7 @@ async def handle_user_input(event):
         phone = text
         temp_storage[sender_id]['phone'] = phone
         
-        waiting_msg = await event.respond("⏳ **Waiting for otp...** (কানেক্ট করা হচ্ছে...)")
+        waiting_msg = await event.respond("⏳ **Waiting for otp...**")
         
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
@@ -172,7 +163,6 @@ async def handle_user_input(event):
 async def finalize_login(event, sender_id, client, phone):
     session_string = client.session.save()
     
-    # অটো কান্ট্রি ডিটেক্ট
     country = get_country_name(phone)
     
     data = load_data()
@@ -190,7 +180,7 @@ async def finalize_login(event, sender_id, client, phone):
     del temp_storage[sender_id]
     
     await event.respond(
-        f"🎉 অভিনন্দন! অ্যাকাউন্ট সফলভাবে সেভ হয়ে গেছে।\n📱 নম্বর: {phone}\n🌍 দেশ: {country}",
+        f"🎉 অভিনন্দন! অ্যাকাউন্ট সফলভাবে সেভ হয়ে গেছে।\n🌍 দেশ: {country}\n📱 নম্বর: `{phone}`",
         buttons=main_menu_keyboard()
     )
 
